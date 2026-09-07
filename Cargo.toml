@@ -35,7 +35,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 
 parking_lot = "0.12"
 
-oci-spec = "0.9"
+oci-spec = "0.10"
 
 tokio = { version = "1", features = ["full"] }
 
