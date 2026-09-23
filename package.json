@@ -51,7 +51,7 @@
     "@napi-rs/cli": "^3.9.1",
     "@oxc-node/core": "^0.1.0",
     "@types/node": "^20.0.0",
-    "ava": "^6.4.1",
+    "ava": "^8.0.1",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.82.0",
     "typescript": "^5.9.2"
@@ -74,9 +74,9 @@
     "environmentVariables": {
       "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json"
     },
-    "extensions": {
-      "ts": "module"
-    },
+    "extensions": [
+      "ts"
+    ],
     "nodeArguments": [
       "--import",
       "@oxc-node/core/register"
