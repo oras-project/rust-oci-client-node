@@ -15,6 +15,7 @@ on:
       - '.github/workflows/nodejs-build-call.yml'
       - '.github/workflows/nodejs-build.yml'
       - 'deny.toml'
+      - 'yarn.lock'
   pull_request:
     paths:
       - 'src/**'
@@ -27,6 +28,7 @@ on:
       - '.github/workflows/nodejs-build-call.yml'
       - '.github/workflows/nodejs-build.yml'
       - 'deny.toml'
+      - 'yarn.lock'
 
 permissions:
   contents: read
