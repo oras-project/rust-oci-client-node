@@ -48,7 +48,7 @@
     "sync-version": "node scripts/sync-version.js"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^3.9.1",
+    "@napi-rs/cli": "^3.10.4",
     "@oxc-node/core": "^0.1.0",
     "@types/node": "^20.0.0",
     "ava": "^8.0.1",
