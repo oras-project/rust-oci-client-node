@@ -37,6 +37,8 @@ pub enum OciErrorCode {
     Denied,
     Unsupported,
     Toomanyrequests,
+    #[serde(untagged)]
+    Other(String),
 }
 
 impl From<&NativeOciErrorCode> for OciErrorCode {
@@ -59,6 +61,7 @@ impl From<&NativeOciErrorCode> for OciErrorCode {
             NativeOciErrorCode::Denied => Self::Denied,
             NativeOciErrorCode::Unsupported => Self::Unsupported,
             NativeOciErrorCode::Toomanyrequests => Self::Toomanyrequests,
+            NativeOciErrorCode::Other(code) => Self::Other(code.clone()),
         }
     }
 }

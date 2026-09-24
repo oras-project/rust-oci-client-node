@@ -1179,7 +1179,9 @@ impl OciClient {
                 Ok(match tokio::fs::File::open(&path).await {
                     Ok(file) => {
                         let stream = ReaderStream::new(file).map_err(OciDistributionError::from);
-                        client.push_blob_stream(&reference, stream, &digest).await
+                        client
+                            .push_blob_stream(&reference, stream, &digest, None)
+                            .await
                     }
                     Err(err) => Err(err.into()),
                 })

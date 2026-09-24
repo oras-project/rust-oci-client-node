@@ -1,6 +1,6 @@
 [package]
 name = "oci-client-nodejs-bindings"
-version = "0.17.0"
+version = "0.18.0-next.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Node.js bindings for rust-oci-client"
@@ -27,7 +27,7 @@ napi = { version = "3", default-features = false, features = [
 ] }
 napi-derive = "3"
 
-oci-client = { version = "0.17", default-features = false }
+oci-client = { version = "0.18.0", default-features = false }
 
 bytes = "1"
 futures-util = "0.3"
@@ -35,7 +35,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 
 parking_lot = "0.12"
 
-oci-spec = "0.9"
+oci-spec = "0.10"
 
 tokio = { version = "1", features = ["full"] }
 
