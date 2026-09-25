@@ -1,6 +1,6 @@
 {
   "name": "@oras-project/oci-client-testing",
-  "version": "0.17.0",
+  "version": "0.18.0-next.0",
   "description": "Test utilities for @oras-project/oci-client — MockRegistry (in-process) and ZotRegistry (container-based)",
   "license": "Apache-2.0",
   "author": "The ORAS Authors",
