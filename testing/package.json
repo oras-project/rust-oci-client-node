@@ -3,6 +3,16 @@
   "version": "0.17.0",
   "description": "Test utilities for @oras-project/oci-client — MockRegistry (in-process) and ZotRegistry (container-based)",
   "license": "Apache-2.0",
+  "author": "The ORAS Authors",
+  "homepage": "https://github.com/oras-project/rust-oci-client-node#readme",
+  "bugs": {
+    "url": "https://github.com/oras-project/rust-oci-client-node/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oras-project/rust-oci-client-node.git",
+    "directory": "testing"
+  },
   "files": [
     "dist",
     "fixtures"

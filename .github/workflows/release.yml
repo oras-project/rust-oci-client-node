@@ -1,0 +1,20 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write # Required for OIDC Trusted Publishing
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-nodejs:
+    name: Publish Node.js Bindings
+    uses: ./.github/workflows/nodejs-publish-call.yml
+    secrets: inherit

@@ -2,13 +2,37 @@ name: Node.js Bindings Publish Call
 
 on:
   workflow_call:
+    inputs:
+      release_tag:
+        description: 'Release tag override (e.g. v0.18.0)'
+        type: string
+        required: false
+      dry_run:
+        description: 'Dry run (simulate publish without modifying npm)'
+        type: boolean
+        default: false
+        required: false
     secrets:
       NPM_TOKEN:
-        required: true
+        required: false # Optional: Set during initial setup, omit once Trusted Publishing is enabled
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag override (e.g. v0.18.0 or v0.18.0-rc.1)'
+        type: string
+        required: false
+      dry_run:
+        description: 'Dry run (simulate publish without modifying npm)'
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
+
+concurrency:
+  group: npm-publish-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -17,18 +41,23 @@ jobs:
     needs: build-and-test-nodejs
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Enables Trusted Publishing (OIDC) & NPM Provenance
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Setup node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Verify version consistency
-        run: node scripts/sync-version.js --check
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: node scripts/sync-version.js --check --tag "${INPUT_RELEASE_TAG}"
 
       - name: Enable Corepack
         run: corepack enable
@@ -49,47 +78,127 @@ jobs:
           yarn artifacts
           cp artifacts/bindings-js/index.js artifacts/bindings-js/index.d.ts .
 
-      - name: List packages
-        run: ls -R ./npm
-        shell: bash
-
-      - name: Publish
-        run: |
-          npm config set provenance true
-          npm config set access public
-          TAG="${GITHUB_REF_NAME:-}"
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-            npm publish --access public
-          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-            npm publish --tag next --access public
-          else
-            echo "No release tag detected (GITHUB_REF_NAME='$TAG'), skipping publish"
-          fi
+      - name: Determine dist-tag & release status
+        id: tag
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          [[ "${RUNNER_DEBUG:-}" == "1" ]] && set -x
+
+          DRY_RUN="${INPUT_DRY_RUN:-false}"
+
+          PKG_NAME=$(jq -r .name package.json)
+          VERSION=$(jq -r .version package.json)
+
+          NPM_LATEST=$(npm view "$PKG_NAME" dist-tags.latest 2>/dev/null || echo "")
+
+          # Strip prerelease/build metadata (%%[-+]* only strips trailing +/- chars)
+          if [[ "$VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            BASE_VERSION="${BASH_REMATCH[1]}"
+          else
+            echo "Skipping publish: '$VERSION' is not a valid semver version"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          IFS='.' read -r MAJOR MINOR _ <<< "$BASE_VERSION"
+
+          IS_BACKPORT="false"
+          if [[ -n "$NPM_LATEST" ]] && npx semver -r "<$NPM_LATEST" "$BASE_VERSION" >/dev/null 2>&1; then
+            IS_BACKPORT="true"
+          fi
+
+          SYNC_NEXT_TAG=""
+
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            # --- STABLE RELEASES ---
+            IS_PRERELEASE="false"
+            if [[ "$IS_BACKPORT" == "true" ]]; then
+              DIST_TAG="v${MAJOR}.${MINOR}"
+              SYNC_NEXT_TAG="v${MAJOR}.${MINOR}-next"
+            else
+              DIST_TAG="latest"
+              SYNC_NEXT_TAG="next"
+            fi
+
+          elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-([a-zA-Z0-9]+) ]]; then
+            # --- PRERELEASES ---
+            # Dist-tag is the leading prerelease id (e.g. 0.18.0-rc.1 → "rc")
+            IS_PRERELEASE="true"
+            PRE_IDENTIFIER="${BASH_REMATCH[1]}"
+
+            if [[ "$IS_BACKPORT" == "true" ]]; then
+              DIST_TAG="v${MAJOR}.${MINOR}-${PRE_IDENTIFIER}"
+            else
+              DIST_TAG="${PRE_IDENTIFIER}"
+            fi
+
+          else
+            echo "Skipping publish: '$VERSION' is not a valid semver version"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "=== DRY RUN MODE ENABLED ==="
+          fi
+
+          echo "Target publish version $VERSION under dist-tag '$DIST_TAG'"
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "sync_next_tag=$SYNC_NEXT_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
+
+          echo "NPM_CONFIG_TAG=$DIST_TAG" >> "$GITHUB_ENV"
+          echo "NPM_CONFIG_PROVENANCE=true" >> "$GITHUB_ENV"
+          echo "NPM_CONFIG_ACCESS=public" >> "$GITHUB_ENV"
+
+      - name: Publish main & NAPI platform packages
+        if: steps.tag.outputs.should_publish == 'true' && steps.tag.outputs.is_dry_run == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish
+
+      - name: Sync 'next' tag for main package
+        if: steps.tag.outputs.should_publish == 'true' && steps.tag.outputs.is_prerelease == 'false' && steps.tag.outputs.is_dry_run == 'false'
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          SYNC_TAG: ${{ steps.tag.outputs.sync_next_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          PKG_NAME=$(jq -r .name package.json)
+          echo "Promoting '${SYNC_TAG}' tag to stable version ${VERSION}..."
+          npm dist-tag add "${PKG_NAME}@${VERSION}" "${SYNC_TAG}" || true
 
       - name: Build testing package
+        if: steps.tag.outputs.should_publish == 'true' && steps.tag.outputs.is_dry_run == 'false'
         run: cd testing && yarn build
 
       - name: Publish testing package
-        run: |
-          TAG="${GITHUB_REF_NAME:-}"
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            cd testing && npm publish --access public
-          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            cd testing && npm publish --tag next --access public
-          else
-            echo "No release tag detected, skipping testing package publish"
-          fi
+        if: steps.tag.outputs.should_publish == 'true' && steps.tag.outputs.is_dry_run == 'false'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd testing
+          npm publish
+
+      - name: Sync 'next' tag for testing package
+        if: steps.tag.outputs.should_publish == 'true' && steps.tag.outputs.is_prerelease == 'false' && steps.tag.outputs.is_dry_run == 'false'
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          SYNC_TAG: ${{ steps.tag.outputs.sync_next_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          PKG_NAME=$(jq -r .name testing/package.json)
+          echo "Promoting '${SYNC_TAG}' tag for testing package to stable version ${VERSION}..."
+          npm dist-tag add "${PKG_NAME}@${VERSION}" "${SYNC_TAG}" || true
 
   build-and-test-nodejs:
     name: Build & Test Node.js
     permissions:
       contents: read
     uses: ./.github/workflows/nodejs-build-call.yml
+    with:
+      ref: ${{ inputs.release_tag || github.ref_name }}
