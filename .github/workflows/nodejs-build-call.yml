@@ -160,7 +160,7 @@ jobs:
           targets: ${{ matrix.settings.target }}
 
       - name: Install cargo-auditable
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           # >=0.7.3: uses -u instead of --undefined, fixing Zig linker (musl builds).
           tool: cargo-auditable@0.7.7
@@ -185,7 +185,7 @@ jobs:
           version: 0.14.1
 
       - name: Install cargo-zigbuild
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         if: ${{ contains(matrix.settings.target, 'musl') }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
